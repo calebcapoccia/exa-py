@@ -1,0 +1,326 @@
+--- old_sdk.txt
+
++++ new_sdk.txt
+
+@@ -46,6 +46,7 @@
+
+     components = snake_str.split("_")
+     return components[0] + "".join(x.title() for x in components[1:])
+ 
++
+ def to_camel_case(data: dict) -> dict:
+     """
+     Convert keys in a dictionary from snake_case to camelCase recursively.
+@@ -62,6 +63,7 @@
+
+         if v is not None
+     }
+ 
++
+ def camel_to_snake(camel_str: str) -> str:
+     """Convert camelCase string to snake_case.
+ 
+@@ -73,6 +75,7 @@
+
+     """
+     snake_str = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", camel_str)
+     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", snake_str).lower()
++
+ 
+ def to_snake_case(data: dict) -> dict:
+     """
+@@ -88,6 +91,7 @@
+
+         camel_to_snake(k): to_snake_case(v) if isinstance(v, dict) else v
+         for k, v in data.items()
+     }
++
+ 
+ SEARCH_OPTIONS_TYPES = {
+     "query": [str],  # The query string.
+@@ -111,10 +115,10 @@
+
+     "use_autoprompt": [bool],  # Convert query to Exa (Higher latency, Default: false).
+     "type": [
+         str
+-    ],  # 'keyword' or 'neural' (Default: neural). Choose 'neural' for high-quality, semantically relevant content in popular domains. 'Keyword' is for specific, local, or obscure queries.
++    ],  # 'keyword' or 'neural' or 'auto' (Default: neural). Choose 'neural' for high-quality, semantically relevant content in popular domains. 'Keyword' is for specific, local, or obscure queries.
+     "category": [
+         str
+-    ],  # A data category to focus on, with higher comprehensivity and data cleanliness. Currently, the only category is company.
++    ],  # A data category to focus on, with higher comprehensivity and data cleanliness. Categories right now include company, research paper, news, github, tweet, movie, song, personal site, and pdf.
+ }
+ 
+ FIND_SIMILAR_OPTIONS_TYPES = {
+@@ -147,13 +151,10 @@
+
+ }
+ 
+ CONTENTS_ENDPOINT_OPTIONS_TYPES = {
+-    "subpages": [int], # Number of subpages to get contents for; these will appear as additional content results
+-    "subpage_target": [str, list]  # Specific subpage(s) to get contents for
++    "subpages": [int],  # Number of subpages to get contents for; these will appear as additional content results
++    "subpage_target": [str, list],  # Specific subpage(s) to get contents for
++    "extras": [dict, bool],  # Extra parameters to pass.
+ }
+-
+-# FOR BETA OPTIONS
+-# if is_beta:
+-
+ 
+ def validate_search_options(
+     options: Dict[str, Optional[object]], expected: dict
+@@ -178,6 +179,7 @@
+
+                 f"Invalid value for option '{key}': {value}. Expected one of {expected_types}"
+             )
+ 
++
+ def is_valid_type(value, expected_type):
+     if get_origin(expected_type) is Literal:
+         return value in get_args(expected_type)
+@@ -185,6 +187,7 @@
+
+         return isinstance(value, expected_type)
+     return False  # For any other case
+ 
++
+ class TextContentsOptions(TypedDict, total=False):
+     """A class representing the options that you can specify when requesting text
+ 
+@@ -210,6 +213,7 @@
+
+     num_sentences: int
+     highlights_per_url: int
+ 
++
+ class SummaryContentsOptions(TypedDict, total=False):
+     """A class representing the options that you can specify when requesting summary
+ 
+@@ -218,6 +222,17 @@
+
+     """
+ 
+     query: str
++
++
++class ExtrasContentsOptions(TypedDict, total=False):
++    """A class representing the extra options that you can specify.
++
++    Attributes:
++        links (int): The number of links to return.
++    """
++
++    links: int
++
+ 
+ @dataclass
+ class _Result:
+@@ -271,12 +286,16 @@
+
+         highlights (List[str], optional): The highlights of the search result.
+         highlight_scores (List[float], optional): The scores of the highlights of the search result.
+         summary (str, optional): The summary of the search result.
++        subpages (List[Result], optional): The subpages of the search result.
++        extras (ExtrasContentsOptions, optional): Extra parameters for the result.
+     """
+ 
+     text: Optional[str] = None
+     highlights: Optional[List[str]] = None
+     highlight_scores: Optional[List[float]] = None
+     summary: Optional[str] = None
++    subpages: Optional[List[Result]] = None
++    extras: Optional[ExtrasContentsOptions] = None
+ 
+     def __str__(self):
+         base_str = super().__str__()
+@@ -285,6 +304,8 @@
+
+             f"Highlights: {self.highlights}\n"
+             f"Highlight Scores: {self.highlight_scores}\n"
+             f"Summary: {self.summary}\n"
++            f"Subpages: {self.subpages}\n"
++            f"Extras: {self.extras}\n"
+         )
+ 
+ 
+@@ -348,6 +369,7 @@
+
+             f"Highlight Scores: {self.highlight_scores}\n"
+         )
+ 
++
+ @dataclass
+ class ResultWithSummary(_Result):
+     """
+@@ -363,6 +385,7 @@
+
+         base_str = super().__str__()
+         return base_str + f"Summary: {self.summary}\n"
+ 
++
+ @dataclass
+ class ResultWithTextAndSummary(_Result):
+     """
+@@ -379,6 +402,7 @@
+
+     def __str__(self):
+         base_str = super().__str__()
+         return base_str + f"Text: {self.text}\n" + f"Summary: {self.summary}\n"
++
+ 
+ @dataclass
+ class ResultWithHighlightsAndSummary(_Result):
+@@ -402,6 +426,7 @@
+
+             f"Highlight Scores: {self.highlight_scores}\n"
+             f"Summary: {self.summary}\n"
+         )
++
+ 
+ @dataclass
+ class ResultWithTextAndHighlightsAndSummary(_Result):
+@@ -428,6 +453,7 @@
+
+             f"Highlight Scores: {self.highlight_scores}\n"
+             f"Summary: {self.summary}\n"
+         )
++
+ 
+ T = TypeVar("T")
+ 
+@@ -540,8 +566,8 @@
+
+             include_text (List[str], optional): List of strings that must be present in the webpage text of results. Currently, only one string is supported, up to 5 words.
+             exclude_text (List[str], optional): List of strings that must not be present in the webpage text of results. Currently, only one string is supported, up to 5 words.
+             use_autoprompt (bool, optional): If true, convert query to a Exa query. Defaults to False.
+-            type (str, optional): The type of search, 'keyword' or 'neural'. Defaults to "neural".
+-            category (str, optional): A data category to focus on, with higher comprehensivity and data cleanliness. Currently, the only category is company.
++            type (str, optional): The type of search, 'keyword', 'neural', or 'auto'. Defaults to "neural".
++            category (str, optional): A data category to focus on, with higher comprehensivity and data cleanliness. Categories right now include company, research paper, news, github, tweet, movie, song, personal site, and pdf.
+         Returns:
+             SearchResponse: The response containing search results and optional autoprompt string.
+         """
+@@ -758,7 +784,11 @@
+
+             for k, v in {"query": query, **kwargs}.items()
+             if k != "self" and v is not None
+         }
+-        if "text" not in options and "highlights" not in options and "summary" not in options:
++        if (
++            "text" not in options
++            and "highlights" not in options
++            and "summary" not in options
++        ):
+             options["text"] = True
+         validate_search_options(
+             options, {**SEARCH_OPTIONS_TYPES, **CONTENTS_OPTIONS_TYPES}
+@@ -781,7 +811,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithText]:
+         ...
+ 
+@@ -795,7 +825,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithText]:
+         ...
+ 
+@@ -809,7 +839,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithHighlights]:
+         ...
+ 
+@@ -824,7 +854,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithTextAndHighlights]:
+         ...
+ 
+@@ -838,7 +868,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithSummary]:
+         ...
+ 
+@@ -853,7 +883,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithTextAndSummary]:
+         ...
+ 
+@@ -868,7 +898,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithHighlightsAndSummary]:
+         ...
+ 
+@@ -884,7 +914,7 @@
+
+         livecrawl: Optional[LIVECRAWL_OPTIONS] = None,
+         filter_empty_results: Optional[bool] = None,
+         subpages: Optional[int] = None,
+-        subpage_target: Optional[Union[str, List[str]]] = None
++        subpage_target: Optional[Union[str, List[str]]] = None,
+     ) -> SearchResponse[ResultWithTextAndHighlightsAndSummary]:
+         ...
+ 
+@@ -894,9 +924,15 @@
+
+             for k, v in {"ids": ids, **kwargs}.items()
+             if k != "self" and v is not None
+         }
+-        if "text" not in options and "highlights" not in options and "summary" not in options:
++        if (
++            "text" not in options
++            and "highlights" not in options
++            and "summary" not in options
++        ):
+             options["text"] = True
+-        validate_search_options(options, {**CONTENTS_OPTIONS_TYPES, **CONTENTS_ENDPOINT_OPTIONS_TYPES})
++        validate_search_options(
++            options, {**CONTENTS_OPTIONS_TYPES, **CONTENTS_ENDPOINT_OPTIONS_TYPES}
++        )
+         options = to_camel_case(options)
+         data = self.request("/contents", options)
+         return SearchResponse(
+@@ -1212,7 +1248,7 @@
+
+             )
+ 
+         print("Wrapping OpenAI client with Exa functionality.", type(create_with_rag))
+-        client.chat.completions.create = create_with_rag # type: ignore
++        client.chat.completions.create = create_with_rag  # type: ignore
+ 
+         return client
+ 
